@@ -289,7 +289,7 @@ lambda = 1
   # PERO NO PUEDO DEFINIR LA SECUENCIA DE LAMBDAS :(
 train_apply_lasso = function(fold_split, lambda) {
 
-    # get analysis data
+  # get analysis data
   dat_an = fold_split %>% analysis()
   # train receta sobre analysis data
   receta_trained = dat_an %>% receta() %>% prep(retain=T)
@@ -314,21 +314,6 @@ train_apply_lasso = function(fold_split, lambda) {
 
 }
 
-
-
-
-
-aa$a0
-q = predict(mod_lasso, dat_as_baked, penalty=-Inf)
-d = predict(mod_lasso, dat_as_baked, penalty=1)
-x = predict(mod_lasso, dat_as_baked, penalty=0.0001029, type="raw")
-y = predict(mod_lasso, dat_as_baked, penalty=0.000160)
-f = predict(mod_lasso, dat_as_baked, penalty=0)
-g = predict(mod_lasso, dat_as_baked, penalty=-5)
-identical(x,q)
-identical(x,y)
-identical(f,g)
-identical(q,d)
 
 # yardstick
 
@@ -357,25 +342,6 @@ aa = map_df(lseq, function(l) kfold_lasso(cv_split, lambda=l), .id="lambda")
 
 
 
-recipe_rf <- function(dataset) {
-  recipe(Churn ~ ., data = dataset) %>%
-    step_string2factor(all_nominal(), -all_outcomes()) %>%
-    step_dummy(all_nominal(), -all_outcomes()) %>%
-    step_center(all_numeric()) %>%
-    step_scale(all_numeric()) %>%
-    prep(data = dataset)
-}
-
-iris_recipe <- training(iris_split) %>%
-  recipe(Species ~.) %>%
-  step_corr(all_predictors()) %>%
-  step_center(all_predictors(), -all_outcomes()) %>%
-  step_scale(all_predictors(), -all_outcomes()) %>%
-  prep()
-
-
-
-# prep: aplica transformaciones
 
 
 
@@ -427,52 +393,6 @@ iris_recipe <- training(iris_split) %>%
 # # (no las vars mismas!)
 # 
 # 
-
-# lasso con tidymodels
-
-
-
-
-
-
-
-
-
-
-
-library(magrittr)
-library(dplyr)
-library(purrr)
-
-library(rsample)
-library(recipes)
-
-
-
-
-
-dat = iris %>% janitor::clean_names() %>% as_tibble()
-
-set.seed(111)
-dat$x1 = sample(c(0,1),size=nrow(dat),replace=T,prob=c(.01,.99))
-dat$x2 = sample(1:10,size=nrow(dat),replace=T)
-
-target = "sepal_length"
-
-
-
-# notassss ----------------------------------------------------------------
-
-# ver 
-# drop_na
-
-
-
-
-
-
-
-
 
 # bonus track -------------------------------------------------------------
 
