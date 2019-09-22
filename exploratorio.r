@@ -7,6 +7,10 @@ library(ggridges)
 library(forcats)
 
 
+# TODO --------------------------------------------------------------------
+
+# hacer todos los scatter plots en tibble o pdf (ver mimic) 
+
 # working directory -------------------------------------------------------
 
 getwd()
@@ -144,10 +148,6 @@ tabw = tab %>%
 tabw %>% 
   gather(key="semiarido", value="pop", -nome_uf)
 
-# ver si poner data.table:
-# dat %>% 
-  # data.table::dcast(nombre + apellido ~ parcial, value.vars=c("..."))
-
 
 # exploratorio ------------------------------------------------------------
 
@@ -235,3 +235,40 @@ g = ggplot(dat,aes(x=log(exportacoes_2016_pc), y=log(importacoes_2016_pc)
   geom_point(alpha=0.8, size=0.8)
 plotly::ggplotly(g)
 
+
+# bonus track -------------------------------------------------------------
+
+# todos los scatter en un pdf
+
+# genera log de todas las vars
+d_num_exp = d_num %>%
+  mutate_all(list("log" = function(x) ifelse(x==0, 0, sign(x)*log(abs(x))) ))
+
+# hay combn(48,2)=2256 scatterplots posibles!!!
+  # --> elegimos las de alta cor (pearson)
+
+# Cor en niveles (only lower triangle of matrix)
+mcor_n = cor(d_num, method="pearson")
+mcor_n[upper.tri(mcor_n, diag=T)] = NA
+tcor_n = mcor_n %>% data.table::melt()
+
+# Cor en logs (only lower triangle of matrix)
+mcor_l = cor(d_num_exp %>% select(ends_with("_log")), method="pearson")
+mcor_l[upper.tri(mcor_l, diag=T)] = NA
+tcor_l = mcor_l %>% data.table::melt()
+
+# tabla con todas las cors altas
+tcor = rbind(tcor_n, tcor_l) %>% 
+  dplyr::filter(value>0.5) %>% 
+  arrange(-value)
+
+# lista de plots
+g_cor = map2(
+  .x=tcor$Var1, .y=tcor$Var2
+  ,function(x,y) qplot(d_num_exp[[x]], d_num_exp[[y]], xlab=x, ylab=y,
+                       size=I(0.5), geom="jitter", alpha=I(0.5))
+)
+
+# save plots
+ggsave("output/scatter_brasil.pdf",width=6,height=6,
+       gridExtra::marrangeGrob(grobs=g_cor, nrow=2, ncol=1))
