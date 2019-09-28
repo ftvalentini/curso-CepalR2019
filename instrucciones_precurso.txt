@@ -1,0 +1,8 @@
+1. Descargar la versi?n de R m?s reciente para el sistema operativo que corresponda desde https://cran.r-project.org
+2. Descargar RStudio Desktop para el sistema operativo que corresponda desde https://rstudio.com/products/rstudio/download
+3. Correr el siguiente comando desde la consola de R:
+	install.packages(c(
+    	"broom","car","caret","data.table","dplyr","forcats","ggfortify","ggplot2"
+    	,"ggpubr","ggridges","glmnet","janitor","lubridate","magrittr","parsnip","purrr"
+    	,"recipes","rsample","stringr","tidyr","yardstick"
+  	))
