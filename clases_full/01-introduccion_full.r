@@ -28,6 +28,7 @@ y > x
 
 # logicos
 # ! & | && ||
+TRUE
 !FALSE
 !F
 F & T
@@ -43,7 +44,7 @@ x == 1 | y==80
 
 # vectores (atomicos) -----------------------------------------------------
 
-a = c(0,2,5,3,8) # concatenar
+a = c(0,2,5,3,8) # combinar
 typeof(a) # tipo
 class(a) # clase
 b = c("a","b","c","d","e")
@@ -69,7 +70,7 @@ seq_along(a)
 20:1
 seq(1,20,1)
 seq(1,20,0.5)
-set.seed(8) # set.seed
+set.seed(8) # semilla
 muestra = sample(1:10,15,replace=T) # muestra 
 sample(letters,10,rep=T)
 
@@ -163,17 +164,6 @@ df2[df2$v2 %in% c(30,50),"v5"]
 head(df2,5) # head
 tail(df2) # tail
 
-# tipos/clases de estructuras ----------------------------------------------
-
-# numeric (double o integer) character logical date factor
-typeof(8)
-typeof(8L)
-typeof(T)
-typeof("hola")
-class(x) = "ruben"
-typeof(x) = "ruben"
-class(T)
-
 # loops -------------------------------------------------------------------
 
 # for 
@@ -185,16 +175,14 @@ resultado = c()
 for (i in seq_along(a)) {
   resultado[i] = a[i]*2
 }
+  # pregunta: ¿se puede hacer sin loop?
 
 # while
-i = 1
-out = c(1)
-while (!(sum(out) %% 2 == 0)) {
-  print(paste("iteracion: ", i))
-  out = c(out,sample(1000,1))
-  i = i + 1
-  print(out)
-  print(paste("resto = ",sum(out) %% 2))
+resultado = c()
+i = 1 
+while (i <= length(a)) {
+  resultado[i] = a[i]*2
+  i = i+1
 }
 
 # purrr::map() 
@@ -202,7 +190,7 @@ lista = list(1:10, 20, 56, 13:9)
 purrr::map(lista, mean)
 resultado = purrr::map(lista, function(x) x+5) # funcion anonima
 
-# EJERCICIO: ejecutar esta ultima operacion con while y con for
+# EJERCICIO 1: ejecutar esta ultima operacion con while y con for
 # solucion:
 # i = 1
 # resultado = list()
@@ -212,6 +200,19 @@ resultado = purrr::map(lista, function(x) x+5) # funcion anonima
 # }
 # resultado = list()
 # for (i in seq_along(lista)) resultado[[i]] = lista[[i]] + 5
+
+# EJERCICIO 2: simular cuantas veces necesito sumarle a 1 un numero al azar entre 1 y 1000
+# para que la suma del conjunto sea divisible por 5
+# solucion
+# i = 1
+# out = c(1)
+# while (sum(out) %% 5 != 0) {
+#   out = c(out,sample(1000,1))
+#   print(paste("iteracion: ", i))
+#   i = i + 1
+#   print(out)
+#   print(paste("resto = ",sum(out) %% 5))
+# }
 
 # apply
 apply(df1,MARGIN=1,sum)
@@ -226,6 +227,8 @@ if (is.numeric(y)) {
   print("es numerico!")
 }
 
+if (is.numeric(y)) print("es numerico!")
+
 if (is.numeric(f)) {
   print("es numerico!")
 } else {
@@ -238,11 +241,13 @@ ifelse(a>=5, a+10, 0)
 
 # funciones ---------------------------------------------------------------
 
+# ejemplo: generacion de matrices con numeros al azar
 crea_matriz = function(min, max, rows=4, cols=4) {
   nums = sample(min:max, size=rows*cols, replace=T)
   mat = matrix(nums, nrow=rows, ncol=cols)
   return(mat)
 }
+# ejemplo: operacion condicional sobre una matriz
 matriz_fun = function(mat) {
   if (mean(mat)>10) {┴
     return(mat*100)
@@ -260,37 +265,75 @@ out = purrr::map(matrices, matriz_fun)
 
 
 # ejercicios --------------------------------------------------------------
-#   LOS IMPORTANTES SON C Y D
-# (a) generar vector que concatene tres 1, tres 2, tres 3, ..., tres 10 -- ver "rep" 
-# solucion: rep(1:10,each=3)
-# (b) generar matriz 2x4 con 2 en c1, 4 en c2, 6 en c3 y 8 en c4 -- ver "matrix"
-# solucion: matrix(seq(2,8,2),nr=2,nc=4,byrow=T)
-# (c) Generar vector tamaño=20 con valores al azar entre 1 y 50.
+
+# (a) generar vector que concatene tres 1, tres 2, tres 3, ..., tres 10 -- ver rep() 
+# solucion:
+# rep(1:10,each=3)
+
+# (b) generar matriz 2x4 con 2 en c1, 4 en c2, 6 en c3 y 8 en c4 -- ver matrix()
+# solucion:
+# matrix(seq(2,8,2), nr=2, nc=4, byrow=T)
+
+# (c) Generar vector tamaño=20 con valores al azar entre 1 y 10
 # (c.1) Filtrar elementos ubicados en indice par
-# (c.2) Filtrar elementos mayores a 20. ¿en que posiciones estan?
+# (c.2) Filtrar elementos mayores a 8. ¿en que posiciones estan?
 # (c.3) Obtener todos los elementos menos el primero y el ultimo
-# solucion: # aa <- sample(1:50,20) // aa[seq(2,length(aa),2)] // aa[aa>20] // 
-# which(aa>20) // aa[-c(1,length(aa))]
-# (d) generar data.frame con 3 variables --edad, altura, peso-- y 20 observaciones
-# (d.1) ¿qué observaciones --por indice-- tienen edad mayor a 20 y peso menor a 70?
-# (d.2) generar 4ta columna con nombres de las observaciones (letras al azar)
+# solucion:
+# aa <- sample(1:10,20,rep=T)
+# aa[seq(2,length(aa),2)]
+# aa[aa>8]; which(aa>8)
+# aa[-c(1,length(aa))]
+
+# (d) Generar data.frame al azar con 3 variables --edad, altura, peso-- y 20 observaciones
+# (d.1) ¿qué observaciones --por indice-- tienen edad mayor a 40 y peso menor a 70?
+# (d.2) generar 4ta columna con nombres de las observaciones (letras distintas)
 # (d.3) ¿qué nombres tienen altura mayor a 190 o peso mayor a 80?
 # (d.4) generar columna con IMC (peso/altura^2)
-# solucion: df <- data.frame(edad=sample(16:80,20,rep=T),
-# peso=sample(40:100,20,rep=T),
-# altura=sample(140:200,20,rep=T))
-# df[df$edad>20 & df$peso<70,] // which(df$edad>20 & df$peso<70)
-# df$nombre <- sample(LETTERS,20,rep=F)
+# solucion:
+# df = data.frame(edad = sample(16:80,20,rep=T),
+#                 peso = sample(40:100,20,rep=T),
+#                 altura = sample(140:200,20,rep=T))
+# df[df$edad>40 & df$peso<70,]; which(df$edad>40 & df$peso<70)
+# df$nombre = LETTERS[1:20]
 # df[df$altura>190 | df$peso>80, "nombre", drop=F]
-# df$imc <- df$altura/(df$peso^2)
-# (e) Generar una lista con el vector de (c) y el data.frame de (d) 
-# (e.1) Asignar nombres (letras al azar) a los elementos del vector de la lista
-# (e.2) Obtener peso y altura del data.frame de los nombres con numero mayor que 20 en el vector 
-# solucion: milista <- list(a=aa, b=df)
-# names(milista[[1]]) <- LETTERS[1:20]
-# nombres <- names(milista$a[milista$a>20])
-# milista[[2]][milista[[2]]$nombre %in% nombres,c("peso","altura")]
+# df$imc = df$altura/(df$peso^2)
 
+# (e) Generar una lista de 2 elementos: el vector de (c) y el data.frame de (d)
+    # (supongamos que el vector de (c) indica las notas en un examen de cada nombre de (d))
+# (e.1) Modificar 5 notas al azar con numeros al azar
+# (e.2) Asignar nombres al azar a las notas usando las letras del data.frame
+# (e.3) Obtener peso y altura de los nombres con nota mayor que 8
+# solucion: 
+# milista = list(a=aa, b=df)
+# milista$a[sample(length(milista$a),5)] = sample(1:10,5)
+# names(milista$a) = sample(milista$b$nombre, 20)
+# nombres = milista$a[milista$a>8] %>% names()
+# milista$b[milista$b$nombre %in% nombres,c("peso","altura")]
+
+# (f) Crear una funcion que al ser aplicada sobre una lista indique:
+#     - la clase de cada elemento, y
+#       - si es un vector o matriz numerica: el maximo
+#       - si es un data.frame: el minimo cada variable
+#       - cualquier otro caso: NA
+#     Aplicarla a la lista de (e)
+# solucion:
+# info = function(objeto) {
+#   out = list()
+#   out$clase = class(objeto)
+#   if (is.numeric(objeto)) {
+#     out$info = max(objeto) 
+#   } else {
+#     if (is.data.frame(objeto)) {
+#       # out$info = apply(objeto, MARGIN=2, min)
+#       out$info = purrr::map(objeto, min)
+#     } else {
+#       out$info = NA
+#     }
+#   }
+#   return(out)
+# }
+# info_lista = function(lista) purrr::map(lista, info)
+# info_lista(milista)
 
 # anexo -------------------------------------------------------------------
 
