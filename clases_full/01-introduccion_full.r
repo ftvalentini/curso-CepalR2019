@@ -335,6 +335,10 @@ out = purrr::map(matrices, matriz_fun)
 # info_lista = function(lista) purrr::map(lista, info)
 # info_lista(milista)
 
+# (g) Por medio de simulaciones calcular la media de la siguiente variable aleatoria:
+    # cantidad de veces que hay que sumarle a 1 un numero aleatorio entre 1 y 1000 para
+    # conseguir una suma divisible por k (hacerlo para k=2,3,4,...,10)
+
 # anexo -------------------------------------------------------------------
 
 # "problema" de map vs loop
