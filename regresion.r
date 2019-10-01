@@ -37,9 +37,39 @@ library(yardstick)
 # mse se calcula en log o en escala original?
 # mostrar la forma mala de hacer CV?
 # chequear que funcione seleccion de lambda en parsnip!!!
-# ver como solucionar que performance en escala original da cualquier cosa en CV lasso!
-# si el proceso es: entran datos - CV - ajuste con mejor lambda:
-  # como se hace CV de ese proceso?? CV dentro del CV??
+# - sobre step_other
+  # a priori parece no tener sentido porque lasso ya descarta
+  # categorias no informativas
+  # ademas si no se usa, no hay inconsistencias en las dummies de train-test
+  # porque al ser factores, se generan todas las dummies
+  # ENTONCES PORQUE LO HACEMOS???
+# comentario importante:
+  # ejercicio supone que
+    # (1) DGP es el mismo para los que responden y los que tienen dato faltante
+    # (2) los que no responden tienen una distribucion de Y similar (X no importa) -->
+        # VER TWIT WSE!
+
+# para ver correlacion entre categoricas y p21:
+  # ANOVA y Kruskal-Walis (explicar brevemente)
+
+# notas de Lasso:
+  # Lasso can be use to make a inference on predictors. Simplest way is to bootstrap
+    # it and count how many times each variable is selected,
+    # divide by number of resamples, and you have your p-values
+  # ridge es mejor para incluir interacciones porque:
+    # if you do not have too many predictors, you might consider ridge regression 
+    # instead, which will return coefficients for all variables that may be much 
+    # less dependent on the vagaries of your particular data sample.
+  # no es sencillo incluir interacciones en lasso asi nomas:
+    # ver Learning Interactions via Hierarchical Group-Lasso Regularization 
+      # (Lim y Hastie, 2015)
+  # en general la incorporacion de no linealidades como interacciones 
+    # se resuelve con metodos mas flexibles y menos parametricos:
+        # arboles y random-forest
+        # SVM
+        # projection pursuit regression
+        # NN
+
 
 # read data ---------------------------------------------------------------
 
@@ -121,9 +151,38 @@ dat_imp = dat_clean %>%
 
 # exploratorio ------------------------------------------------------------
 
-# HACER EXPLORATORIO BREVE
-  # (correlograma)
-  # distsribuciones univariadas
+# distribucion p21
+ggplot(dat) +
+  geom_density(aes(x=p21), adjust=2, fill="red", alpha=0.5) +
+  NULL
+
+# distribucion numericas (por tipo de rpta)
+gdat_num = bind_rows(dat, dat_imp, .id="rpta") %>% 
+  mutate(rpta = as.numeric(rpta)) %>% 
+  select_if(is.numeric) %>% 
+  select(-p21) %>% 
+  data.table::melt(id.vars="rpta")
+  # mutate(id = row_number()) %>% 
+  # pivot_longer(-c(id,rpta), names_to="variable", values_to="value")
+ggplot(gdat_num) +
+  geom_density(aes(x=value, color=rpta), fill="red", alpha=0.5) +
+  facet_wrap(~variable, scales="free") +
+  NULL
+
+# Correlograma numericas
+GGally::ggcorr(dat, label=T, hjust=1, label_size=2.5, layout.exp=10)
+GGally::ggcorr(dat_imp, label=T, hjust=1, label_size=2.5, layout.exp=10)
+
+# barplot categoricas
+# (mejorar en base a lo que haga para clase exploratorio!)
+gdat_cat = dat_clean %>% 
+  select_if(function(x) !is.numeric(x)) %>% 
+  mutate(id = row_number()) %>% 
+  tidyr::pivot_longer(-id, names_to="variable", values_to="value") 
+ggplot(gdat_cat %>% filter(variable %in% c("ch04","ch03","ch07","ch16"))) +
+  geom_bar(aes(x=value)) +
+  facet_wrap(~variable, scales="free") +
+  NULL
 
 # regresion lineal ---------------------------------------------------------------
 
@@ -133,8 +192,11 @@ summary(mod_lm)
 broom::tidy(mod_lm) %>% arrange(p.value) %>% print(n=200)
 broom::tidy(mod_lm, conf.int=T) %>% arrange(p.value) %>% print(n=200)
 glance(mod_lm)
+# cor(mod_lm$fitted.values, mod_lm$model$p21)**2
 
 # en logaritmos
+  # (no es mejor: ifelse(abs(x)<1, x, sign(x)*log(abs(x))) ????
+  # NO PORQUE LOG(1.5)<0.5 POR EJEMPLO --> se rompone la monotonia
 siglog = function(x) ifelse(abs(x)<1, 0, sign(x)*log(abs(x)))
 sigexp = function(x) ifelse(x<0, sign(x)*exp(abs(x)), exp(x))
   # solo la rpta
@@ -171,7 +233,11 @@ ggplot(augment(mod_lmlog2), aes(x=.fitted, y=.resid)) +
 # VIF (revisar valores limite)
 car::vif(mod_lmlog2)
 # metricas de fitted vs obs
-rdos = augment(mod_lmlog2) %>% mutate(.fitted = sigexp(.fitted))
+rdos = augment(mod_lmlog2) %>% 
+  mutate(
+    .fitted = sigexp(.fitted)
+    ,p21 = dat$p21
+    )
 yardstick::metrics(rdos, p21, .fitted)
 
 # Hiperparametrizando ----------------------------------------------------
@@ -183,23 +249,12 @@ yardstick::metrics(rdos, p21, .fitted)
 
 semilla = 150
 
-# nuevas variables  ----------------------------------------------
-
-# solo las no sensibles a data leakage!
-# ojo con generar muchas: lasso es sensible a dim alta (p/n>.10)
-# (step_log y step_sqrt pisan las variables -- no generan nuevas:( )
-
-datf = dat %>% 
-  mutate_if(is.numeric
-            ,list("log"=siglog, "sqrt"=sqrt, "sq"=function(x) x**2)) %>% 
-  select(-c(p21_log,p21_sqrt,p21_sq))
-
 # train - test split ------------------------------------------------------------
 
 # rsample
 
 set.seed(semilla)
-tt_split = datf %>% initial_split(prop=0.8)
+tt_split = dat %>% initial_split(prop=0.8)
 dat_train = tt_split %>% training()
 dat_test = tt_split %>% testing()
 
@@ -227,36 +282,65 @@ receta = function(dataset) {
   
   recipe(p21 ~ ., data=dataset) %>%
     step_log(all_outcomes(), signed=T) %>%
+    step_mutate_at(all_numeric(),-all_outcomes()
+                   ,fn = list(log=siglog, sqrt=sqrt, sq=function(x) x**2)) %>% 
     # step_corr(all_numeric(), -all_outcomes(), threshold=0.9) %>% 
-    step_other(all_nominal(), threshold=0.01, other="otros") %>% 
+    # step_nzv(all_predictors()) %>%
+    # step_other(all_nominal(), threshold=0.01, other="otros") %>% 
     step_dummy(all_nominal(), one_hot=F)  
 
 }
 
+# modelo ------------------------------------------------------------------
+
 # ejemplo sobre training
 receta(dat_train)
 receta_trained = receta(dat_train) %>% prep(retain=T)
-broom::tidy(receta_trained, n=1)
-broom::tidy(receta_trained, n=2)
+recipes::tidy(receta_trained, n=1)
+recipes::tidy(receta_trained, n=2)
 train_prep = juice(receta_trained)
 # train_prep = receta_trained$template #identicos
-
-# modelo ------------------------------------------------------------------
 
 # parsnip (o tal vez no...)
 
 # ejemplo: entrena modelo y aplica sobre test 
-test_baked = receta_trained %>% bake(newdata=dat_test)
+
+# fit function (parsnip NO TOMA PENALTY :(((( )
+fit_lasso = function(data, lambda=NULL) {
+  glmnet::glmnet(
+    x = data %>% select(-p21) %>% as.matrix()
+    ,y = data$p21
+    ,alpha = 1
+    ,lambda = lambda
+  )
+}
+# con parsnip seria:
+#   linear_reg(mode="regression", mixture=1, penalty=lambda) %>% 
+#   set_engine("glmnet") %>% 
+#   fit(p21 ~ ., data=data)
+
+
+# ajusta modelo
 set.seed(semilla)
-mod_lasso = glmnet(x=train_prep %>% select(-p21) %>% as.matrix()
-                   ,y=train_prep$p21
-                   ,alpha=1)
+mod_lasso = fit_lasso(train_prep)
 mod_lasso$lambda
-pred = predict(mod_lasso
-               ,newx = test_baked %>% select(-p21) %>% as.matrix()
-               # ,s=mod_lasso$lambda[30]
-               ,s=0
-) %>% as.vector() %>% sigexp()
+
+# prepara test (2 versiones --> elegir una)
+# test_baked = receta_trained %>% bake(new_data=dat_test)
+test_baked = dat_test %>% receta() %>% prep() %>% bake(new_data=dat_test)
+
+# predict function
+pred_lasso = function(model, newdata, lambda=NULL) {
+  predict(model
+          ,newx = newdata %>% select(-p21) %>% as.matrix()
+          ,s = lambda) %>% 
+    as.vector() %>% sigexp()
+} 
+
+# fitted values in test
+pred = pred_lasso(mod_lasso, test_baked, lambda=0)
+
+# performance
 obs = dat_test$p21
 rdos = data.frame(obs=obs, pred=pred)
 yardstick::metrics(rdos, obs, pred)
@@ -267,7 +351,8 @@ yardstick::metrics(rdos, obs, pred)
 
 # plot(pred, obs)
 
-# elgiendo lambda con CV (ver si dejar esto o sacarlo)
+# Una mejora:
+# elegir lambda con CV
 set.seed(semilla)
 lseq = exp(seq(-10,-5,length.out=50))
 cv_lasso = cv.glmnet(x = train_prep %>% select(-p21) %>% as.matrix()
@@ -278,7 +363,7 @@ cv_lasso = cv.glmnet(x = train_prep %>% select(-p21) %>% as.matrix()
 plot(cv_lasso)
 cv_lasso$lambda.min
 cv_lasso$lambda.1se
-# (pero hay data leakage... hay que reproducir el proceso en cada fold!)
+# (pero puede haber data leakage... hay que reproducir el proceso en cada fold!)
 
 # da right way ------------------------------------------------------------
 
@@ -286,10 +371,9 @@ cv_lasso$lambda.1se
   # de como se implemente en la practica!!!
 
 # entrena lasso para lambda dado en analysis set y aplica en assessment
-  # (lo hago para muchos lambda aca porque el train ya lo hace?)
-  # entonces es mucho mas eficiente
-  # PERO NO PUEDO DEFINIR LA SECUENCIA DE LAMBDAS :(
-  # pero es mas facil explicarlo para un lambda!
+  # el modelo se va ajustar para cada fold para cada valor de lambda
+  # es poco eficiente porque por defecto glmnet ajusta para una secuencia de lambdas
+  # ejercicio: modificar el codigo para aprovechar esto
 
 train_apply_lasso = function(fold_split, lambda) {
 
@@ -299,19 +383,8 @@ train_apply_lasso = function(fold_split, lambda) {
   receta_trained = dat_an %>% receta() %>% prep(retain=T)
   # get analysis preprocesado
   dat_an_prep = juice(receta_trained)
-  # A. entrena modelo (con parsnip)
-  # mod_lasso =
-  #   linear_reg(mode="regression", mixture=1) %>% 
-  #   set_engine("glmnet") %>% 
-  #   fit(p21 ~ ., data=dat_an_prep)
-  # B. entrena modelo (con glmnet porque parsnip no toma penalty!!!)
-  mod_lasso =
-    glmnet::glmnet(
-      x = dat_an_prep %>% select(-p21) %>% as.matrix()
-      ,y = dat_an_prep$p21
-      ,alpha = 1
-      ,lambda = lambda
-    )
+  # entrena modelo 
+  mod_lasso = fit_lasso(dat_an_prep, lambda)
   # get assessment data
   dat_as = fold_split %>% assessment()
   # version A. entrena receta y aplica (assessment preprocesado)
@@ -320,37 +393,14 @@ train_apply_lasso = function(fold_split, lambda) {
     # esta sirve mas para online!
     # pero la usamos porque garantiza que tengamos las mismas variables dummy en los sets
     # si no, puede haber distintas categorias cuando agrupa
-  dat_as_baked = receta_trained %>% bake(newdata=dat_as)
-  
-  # cuando se aplica sigexp() la performance de CV empieza a mejorar apde un punto
-    # en lugar de empeorar!!!
-    # creo que pasa por los valores extremos!
-  
-  # version en log
-  # out = tibble(
-  #   "id" = fold_split$id$id
-  #   ,"obs" = dat_as_baked$p21 
-  #   ,"pred" = predict(mod_lasso
-  #                     ,newx = dat_as_baked %>% select(-p21) %>% as.matrix()
-  #                     ,s = lambda) %>% as.vector() 
-  #   # %>% sigexp()
-  # )
-  
-  # version en escala original (para mi va esta..)
+  dat_as_baked = receta_trained %>% bake(new_data=dat_as)
+  # predict  
   out = tibble(
     "id" = fold_split$id$id
     ,"obs" = dat_as$p21
-    ,"pred" = predict(mod_lasso
-                      ,newx = dat_as_baked %>% select(-p21) %>% as.matrix()
-                      ,s = lambda) %>% as.vector() %>% sigexp()
+    ,"pred" = pred_lasso(mod_lasso, newdata=dat_as_baked, lambda=lambda)
   )
-  
-  # SI FUNCIONA PARSNIP:
-  # out =   tibble(
-  #   "id" = fold_split$id$id
-  #   ,"obs" = dat_as_baked$p21
-  #   ,"pred" = predict(mod_lasso, dat_as_baked, penalty=0.00065) %>% unlist()
-  # )
+  return(out)  
   
   # PARA LA VERSION QUE SE HACE CON UNA SECUENCIA DE LAMBDAS:
   # out = crossing(
@@ -363,28 +413,32 @@ train_apply_lasso = function(fold_split, lambda) {
   #                   unlist())
   #   ) %>% 
   #   unnest()
-
-  return(out)  
   
 }
 
-# yardstick
+# function: train and apply lasso para cada split - y get performance metrics
+# (yardstick)
 
-# # train and apply lasso para cada split - y get performance metrics
-#   # ESTO ES PARA LA VERSION LENTA (CUANDO SE CORRE EL FIT PARA CADA LAMBDA)
+# library(furrr)
+# plan(multicore)
 kfold_lasso = function(cv_splits, lambda) {
   out = list()
   out$fit = map_df(cv_split$splits,
              function(s) train_apply_lasso(fold_split=s, lambda=lambda))
+  # out$fit = future_map_dfr(cv_split$splits,
+                           # function(s) train_apply_lasso(fold_split=s, lambda=lambda))  
   out$summary = out$fit %>%
     group_by(id) %>%
     metrics(obs, pred)
   return(out)
 }
+
+# CV con gridsearch
 lseq = exp(seq(-8,-4,length.out=50))
 rdos = tibble(
   lambda = lseq
   ,lista = map(lseq, function(l) kfold_lasso(cv_split, lambda=l))
+  # ,lista = future_map(lseq, function(l) kfold_lasso(cv_split, lambda=l))
   ,detalle = map(lista, "fit")
   ,metricas = map(lista, "summary")
 )
@@ -416,50 +470,46 @@ ggplot(metricas_sum, aes(x=log(lambda), y=m)) +
 # performance final
 # se ajusta modelo con toda la data y lambda optimo
 set.seed(semilla)
-mod_lasso = glmnet(x=train_prep %>% select(-p21) %>% as.matrix()
-                   ,y=train_prep$p21
-                   ,alpha=1
-                   ,lambda=lambda_1se)
-pred = predict(mod_lasso
-               ,newx = test_baked %>% select(-p21) %>% as.matrix()
-               ,s = lambda_1se
-) %>% as.vector() %>% sigexp()
+mod_lasso = fit_lasso(train_prep, lambda=lambda_1se)
+pred = pred_lasso(mod_lasso, test_baked, lambda=lambda_1se)
 rdos = data.frame(obs=dat_test$p21, pred=pred)
 yardstick::metrics(rdos, obs, pred)
 
 
 # aplicacion del modelo ---------------------------------------------------
 
-# preprocesa train
-receta_trained = datf %>% receta() %>% prep(retain=T)
+# preprocesa data con ingresos
+receta_trained = dat %>% receta() %>% prep(retain=T)
 dat_p = receta_trained %>% juice() 
 
 # entrena modelo
-mod_lasso = glmnet(x=dat_p %>% select(-p21) %>% as.matrix()
-                   ,y=dat_p$p21
-                   ,alpha=1
-                   ,lambda=lambda_1se)
+mod_lasso = fit_lasso(dat_p, lambda_1se)
 mod_lasso %>% broom::tidy() %>% arrange(-abs(estimate)) %>% print(n=100)
-receta_trained %>% broom::tidy(n=2) %>% dplyr::filter(terms=="ch08")
 
-# preprocesa newdata
-  # (hay que generarle los atributos! porque no pude ponerlo como step :( )
-dat_impf = dat_imp %>% 
-  mutate_if(is.numeric
-            ,list("log"=siglog, "sqrt"=sqrt, "sq"=function(x) x**2)) %>% 
-  select(-c(p21_log,p21_sqrt,p21_sq))
-new_baked = receta_trained %>% bake(newdata=dat_impf)
+# si se usa step_other:
+# receta_trained %>% recipes::tidy(n=2) %>% dplyr::filter(terms=="ch08")
+
+# preprocesa data con faltantes (2 versiones --> elegir una)
+# new_baked = receta_trained %>% bake(new_data=dat_imp)
+new_baked = dat_imp %>% receta() %>% prep() %>% bake(new_data=dat_imp)
 
 # predice ingreso
-p21_pred = predict(mod_lasso
-               ,newx = new_baked %>% select(-p21) %>% as.matrix()
-               ,s = lambda_1se
-) %>% as.vector() %>% sigexp()
+p21_pred = pred_lasso(mod_lasso, newdata=new_baked, lambda=lambda_1se)
+  
+
+
+# EJERCICIO 1: modificar la funcion de train y la corrida del CV para aprovechar
+# que la funcion de glmnet calcula fit para muchos lambda
+# PONER ACA LA SOLUCION RECAUCHATADA DEL CODIGO COMENTADO
+
+# EJERCICIO 2: incluir en como hiperparametro si las categoricas se agrupan o no
+  # en "otros"
+# PONER ACA LA SOLUCION (generar otra version de receta y ponerla en el train_apply_lasso
+                       # como parametro y adentro un if)
 
 
 
-
-
+# para el ejercicio 1:
 # esta es la version que usa una seq de lambas en el training
 # lseq = c(0,exp(seq(-10,0,length.out=50)))
 # aa = map_dfr(cv_split$splits, function(s) train_apply_lasso(s, lseq))
@@ -475,18 +525,6 @@ p21_pred = predict(mod_lasso
 # 
 # ggplot(dd, aes(x=log(lambda), y=rmse)) +
 #   geom_line()
-
-
-
-# EJERCICIO 1: modificar la funcion de train y la corrida del CV para aprovechar
-# que la funcion de glmnet calcula fit para muchos lambda
-# PONER ACA LA SOLUCION RECAUCHATADA DEL CODIGO COMENTADO
-
-# EJERCICIO 2: incluir en como hiperparametro si las categoricas se agrupan o no
-  # en "otros"
-# PONER ACA LA SOLUCION (generar otra version de receta y ponerla en el train_apply_lasso
-                       # como parametro y adentro un if)
-
 
 # (A) stepwise selection - caret -------------------------------------------
 
@@ -547,4 +585,17 @@ lc = caret::findLinearCombos(dat_bin)
 dat_bin[lc$linearCombos[[1]]]
 mod = lm(p21 ~ ., data=dat)
 lc2 = alias(mod)
+
+
+
+# notas -------------------------------------------------------------------
+
+
+aa = iris
+bb = dplyr::filter(aa, Species=="virginica")
+
+library(magrittr)
+library(recipes)
+recipes::recipe(bb) %>% 
+  recipes::step_dummy(Species) %>% prep() %>% bake(newdata=bb)
 
