@@ -3,7 +3,7 @@ library(magrittr)
 library(dplyr)
 
 # read excel and clean names
-filep = "data/raw/brasil/ibge/base_de_dados_2010_2016_xls/copia_pib_municipios_FV.xls"
+filep = "data/raw/brasil/ibge/base_de_dados_2010_2016_xls/copia_pib_municipios_FV.xlsx"
 dat = readxl::read_excel(filep, guess_max=5000)
 dat = dat %>% janitor::clean_names()
 

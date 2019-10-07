@@ -143,10 +143,12 @@ bolsa_f = bolsa_f %>%
   )
 pib_f = pib %>% 
   select(-c(
-    ano,codigo_da_grande_regiao,codigo_da_unidade_da_federacao,codigo_do_municipio
-    ,nome_do_municipio,sigla_da_unidade_da_federacao
-  ))
-
+    ano,codigo_da_grande_regiao, nome_do_municipio,sigla_da_unidade_da_federacao
+  )) %>% 
+  rename(
+    codigo_uf = codigo_da_unidade_da_federacao
+    ,codigo_municipio = codigo_do_municipio
+  ) 
 
 # write csvs --------------------------------------------------------------
 

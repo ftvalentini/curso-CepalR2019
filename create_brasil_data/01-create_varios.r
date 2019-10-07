@@ -21,5 +21,8 @@ for (f in files) {
 # joins
 dat = Reduce(f=function(a,b) merge(a,b,all=F), x=dats)
 
+# integer64 as numeric
+dat = dat %>% mutate_if(is.numeric, as.numeric)
+
 # save data as RDS
 saveRDS(dat, file="data/working/brasil/varios_municipios_2016.rds")
