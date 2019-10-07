@@ -2,20 +2,14 @@ library(magrittr)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(ggpubr)
-library(ggridges)
-library(forcats)
-
-
-# TODO --------------------------------------------------------------------
-
-# hacer todos los scatter plots en tibble o pdf (ver mimic) 
+library(purrr)
 
 # working directory -------------------------------------------------------
 
 getwd()
+# opcion a
 path = "C:/Users/Fran/Documents/R_scripts_FV/curso-CepalR2019"  
-# o usar proyectos!
+# opcion b: usar proyectos!
 
 # read data ---------------------------------------------------------------
 
@@ -23,36 +17,40 @@ path = "C:/Users/Fran/Documents/R_scripts_FV/curso-CepalR2019"
 p_bolsa = "data/working/brasil/bolsafamilia_municipios_2016-12.csv"
 p_pib = "data/working/brasil/pib_municipios_2016.csv"
 p_varios = "data/working/brasil/varios_municipios_2016.csv"
+
 # read
 bolsa = read.delim(p_bolsa, header=T, sep=",", dec=".", stringsAsFactors=F
-                     ,encoding="UTF-8")
-pib = read.delim(p_pib, header=T, sep=",", dec=".", stringsAsFactors=F
                    ,encoding="UTF-8")
+pib = read.delim(p_pib, header=T, sep=",", dec=".", stringsAsFactors=F
+                 ,encoding="UTF-8")
 varios = read.delim(p_varios, header=T, sep=",", dec=".", stringsAsFactors=F
-                      ,encoding="UTF-8")
+                    ,encoding="UTF-8")
 
-# EJERCICIO:
-  # LEER ARCHIVOS ITERANDO (SIN REPETIR EL CODIGO R VECES)
+# EJERCICIO 1:
+  # LEER ARCHIVOS ITERANDO (SIN REPETIR EL CODIGO 3 VECES)
 
-# queries / dplyr ---------------------------------------------------------
+# queries (dplyr) ---------------------------------------------------------
 
 # inspeccionar
 dim(bolsa)
+names(pib)
 str(varios)
 glimpse(pib)
 head(bolsa)
 View(bolsa)
 
-# filter/order rows
+# filas
 bolsa %>% 
   dplyr::filter(uf == "RJ" & num_beneficiarios_dic2016 > 50000)
 bolsa %>% 
-  arrange(desc(num_beneficiarios_dic2016),municipio) %>% 
+  arrange(-num_beneficiarios_dic2016,municipio) %>% 
   head()
+bolsa %>% 
+  slice(20:30)
 
-# columns
+# columnas
 pib %>% select(municipio,vab_agro) %>% head()
-pib %>% select(-c(nome_da_grande_regiao,nome_da_unidade_da_federacao))
+pib %>% select(-c(nome_da_grande_regiao,nome_da_unidade_da_federacao)) %>% head()
 pib %>% pull(municipio)
 pib$municipio
 
@@ -71,6 +69,12 @@ pib = pib %>%
 dat = bolsa %>%
   inner_join(pib, by="municipio") %>% 
   left_join(varios, by="municipio")
+# setdiff(pib$municipio, bolsa$municipio)
+# setdiff(bolsa$municipio, pib$municipio)
+# setdiff(varios$municipio, bolsa$municipio)
+
+# EJERCICIO 2:
+  # que municipios tienen area_geografica faltante? (usar funcion is.na)
 
 # nueva columna
 dat %>% mutate(
@@ -81,13 +85,18 @@ dat = dat %>%
   mutate(
     densidad = populacao/area_geografica
     ,suma_perbenef = suma_valor_dic2016/num_beneficiarios_dic2016
-  ) %>% 
+  ) 
+dat = dat %>% 
   mutate_at(
     vars(
       vab_agro,vab_industria,despesa_ciencia_tecnologia_2016
-    ,despesa_custeio_pessoal_2016,despesa_educacao_cultura_2016
-    ,despesa_transporte_2016,exportacoes_2016,importacoes_2016
-    ), list(pc=function(x) x/.$populacao))
+      ,despesa_custeio_pessoal_2016,despesa_educacao_cultura_2016
+      ,despesa_transporte_2016,exportacoes_2016,importacoes_2016
+      ,num_beneficiarios_dic2016
+    ), list(pc=function(x) x/.$populacao)
+  ) 
+dat = dat %>% 
+  mutate_at(vars(codigo_municipio, codigo_uf), as.character)
 
 # ifelse
 dat %>% 
@@ -109,6 +118,7 @@ dat %>%
   )
 
 # agrupar categorias poco frecuentes
+dat$atividade_maior_vab %>% unique()
 dat %>% 
   mutate(
     atividade = forcats::fct_lump(atividade_maior_vab, prop=0.1, other_level="Otros")
@@ -124,61 +134,70 @@ dat %>%
   summarise_if(is.numeric, list(media=mean, max=max, min=min))
 
 # replace NAs
-dat = dat %>% mutate_if(is.numeric
-                        , function(x) ifelse(is.na(x),0,x))
+dat = dat %>% mutate_if(is.numeric, function(x) ifelse(is.na(x),0,x))
+  # replace(dat, is.na(dat) & is.numeric(dat), 0)
 
 # group by
 tab = dat %>% 
   group_by(nome_uf, semiarido) %>% 
-  summarise(s = sum(populacao)) %>% 
+  summarise(
+    pop = sum(populacao)
+    ,n = n()
+    ) %>% 
   ungroup() %>% 
-  arrange(-s)
+  arrange(-pop)
 
-# EJERCICIO:
-  # hacer consultas interesantes!
+# EJERCICIO 3:
+  # obtener cantidad de metropolis (a) por estado y (b) por region
+  # obtener densidad poblacional (a) por estado y (b) por region
 
-# reshape / tidyr ---------------------------------------------------------
-
-# revisar si ya existe tidyr::pivot_longer y tidyr::pivot_wider !!!
+# reshape (tidyr) ---------------------------------------------------------
 
 # long to wide
 tabw = tab %>% 
-  spread(key=semiarido, value=s, fill=0, sep="_")
-# wide to long
-tabw %>% 
-  gather(key="semiarido", value="pop", -nome_uf)
+  pivot_wider(id_cols=nome_uf, names_from=semiarido, values_from=c(pop,n))
 
+# wide to long
+tabl = tab %>% 
+  pivot_longer(cols=-c(nome_uf, semiarido), names_to="variable", values_to="value")
+
+# tabw %>% 
+#   pivot_longer(cols=-nome_uf, names_to=c(".value","semiarido")
+#                ,names_pattern="(.+)_(.+)")
 
 # exploratorio ------------------------------------------------------------
 
 # general
 skimr::skim(dat)
 explora = skimr::skim_to_list(dat)
+# explora$numeric %>% mutate_if(function(x) any(!is.na(as.numeric(x))), as.numeric)
 
 d_num = dat %>% select_if(is.numeric)
 d_cat = dat %>% select_if(function(x) !is.numeric(x))
 
 # categoricas
 table(d_cat$tipologia)
-table(d_cat$tipologia,d_cat$semiarido)
-d_cat %>% janitor::tabyl(hierarquia)
-janitor::tabyl(d_cat, hierarquia, tipologia)
-tabs = d_cat %>% purrr::map(function(x) table(x, useNA="ifany"))
-tabs = d_cat %>% purrr::map(function(x) janitor::tabyl(x))
+table(d_cat$tipologia, d_cat$semiarido)
+tabs = d_cat %>% map(function(x) table(x, useNA="ifany"))
+
+# d_cat %>% janitor::tabyl(hierarquia)
+# janitor::tabyl(d_cat, hierarquia, tipologia) %>% janitor::adorn_percentages("row")
+# tabs = d_cat %>% map(function(x) janitor::tabyl(x))
 
 # cuantiles
 quantile(d_num$populacao, seq(0,1,0.05))
 cuants = d_num %>% map(function(x) quantile(x, seq(0,1,0.05)))
 
 # correlograma
-GGally::ggcorr(dat, label=T, hjust=1, label_size=2.5, layout.exp=10)
+GGally::ggcorr(dat, label=T, hjust=1, label_size=2, layout.exp=10, size=3)
 # GGally::ggcorr(dat, method=c("everything","spearman"), label=T, hjust=1, label_size=2)
 
 # bivariados
 bdat = dat %>% 
-  select(nome_regiao,suma_perbenef,densidad,exportacoes_2016_pc
-         ,importacoes_2016_pc,despesa_ciencia_tecnologia_2016)
-  
+  select(
+    nome_regiao,suma_perbenef,densidad,exportacoes_2016,importacoes_2016
+    ,despesa_ciencia_tecnologia_2016
+  )
 GGally::ggpairs(bdat, mapping=aes(color=nome_regiao))
 GGally::ggpairs(bdat, mapping=aes(color=nome_regiao)
                 ,columns=c("nome_regiao","suma_perbenef"))
@@ -193,8 +212,7 @@ ggplot(dat, aes(x=log(pib_percapita), y=suma_perbenef, color=nome_regiao)) +
 ggplot(dat, aes(x=log(pib), y=log(suma_valor_dic2016))) +
   geom_point(aes(color=nome_regiao)) +
   geom_smooth(se=F, method="lm") +
-  # facet_grid(~ nome_regiao) +
-  facet_wrap(~ nome_regiao) +
+  # facet_wrap(semiarido ~ nome_regiao) +
   # theme_minimal() +
   NULL
 ggpubr::ggscatterhist(
@@ -202,7 +220,7 @@ ggpubr::ggscatterhist(
   , x="suma_perbenef", y="pessoal_log", color="nome_regiao"
   ,size=3, alpha=0.6
   # ,margin.plot="boxplot"
-  ,ggtheme=theme_bw()
+  # ,ggtheme=theme_bw()
 )
 
 # box plot
@@ -213,27 +231,81 @@ ggplot(dat, aes(x=nome_regiao, y=suma_perbenef, fill=nome_regiao)) +
 
 # histogram/density plot
 ggplot(dat, aes(x=log(vab_agro_pc), fill=semiarido)) +
-  # geom_histogram(alpha=0.5) + 
+  geom_density() +
   # geom_density(alpha=0.5, adjust=0.1) +
-  geom_density(alpha=0.5, adjust=2) +
+  # geom_density(alpha=0.5, adjust=2) +
+  # geom_histogram(alpha=0.5) +
   NULL
 ggplot(dat, aes(x=log(populacao), y=tipologia, fill =..x..)) +
-  geom_density_ridges_gradient(scale=1) +
-  viridis::scale_fill_viridis() +
+  ggridges::geom_density_ridges_gradient(scale=1) +
+  scale_fill_viridis_c() +
   NULL
 ggplot(dat, aes(x=log(populacao), y=tipologia, fill=tipologia)) +
-  stat_density_ridges(quantile_lines=T, quantiles=c(.25,.5,.75), alpha=0.7) +
+  ggridges::stat_density_ridges(quantile_lines=T, quantiles=c(.25,.5,.75), alpha=0.7) +
   NULL
 ggplot(dat, aes(x=log(populacao), y=tipologia, fill=tipologia)) +
-  geom_density_ridges(jittered_points=T) +
+  ggridges::geom_density_ridges(jittered_points=T, point_size=0.5) +
   NULL
 
+# barplot
+ggplot(dat) +
+  geom_bar(aes(x=nome_regiao, fill=semiarido)) +
+  # geom_bar(aes(x=nome_regiao, fill=semiarido), position="fill") +
+  # geom_bar(aes(x=nome_regiao, fill=semiarido), position="dodge") +
+  NULL
+
+ggplot(dat) +
+  geom_col(aes(x=nome_regiao, y=num_beneficiarios_dic2016, fill=semiarido)) + 
+  scale_y_continuous(labels=scales::comma) + 
+  NULL
+
+ggplot(dat) +
+  geom_bar(aes(x=nome_regiao, fill=semiarido)
+           , position="fill")
+
+
 # interactive
-g = ggplot(dat,aes(x=log(exportacoes_2016_pc), y=log(importacoes_2016_pc)
-                    ,color=semiarido
-                    ,label=municipio, label2=nome_regiao)) +
+g = ggplot(dat
+           ,aes(x=log(exportacoes_2016), y=log(importacoes_2016)
+                ,color=semiarido
+                ,label=municipio, label2=nome_regiao)) +
   geom_point(alpha=0.8, size=0.8)
 plotly::ggplotly(g)
+
+
+# mapas -------------------------------------------------------------------
+
+# read shapefiles
+sf_mun = sf::read_sf("data/raw/brasil/ibge/br_municipios/BRMUE250GC_SIR.shp")
+sf_uf = sf::read_sf("data/raw/brasil/ibge/br_unidades_da_federacao/BRUFE250GC_SIR.shp")
+
+# join con datos
+sf_mun = sf_mun %>%
+  select(-NM_MUNICIP) %>% 
+  left_join(dat, by=c("CD_GEOCMU"="codigo_municipio"))
+
+# create and save map
+g = ggplot() +
+  geom_sf(data=sf_mun
+          ,aes(fill=num_beneficiarios_dic2016_pc), color=NA) +
+  geom_sf(data=sf_uf
+          ,fill=NA, color="black", size=0.5) +
+  # scale_fill_gradient(trans="log10") +
+  scale_fill_viridis_c(trans="log", na.value="gray60") +
+  theme_minimal() +
+  # coord_sf(xlim=c(-60,-48), ylim=c(-35, -27)) +
+  theme(legend.position=c(0.15,0.2)
+        ,legend.text=) +
+  # guides(fill=FALSE) +
+  NULL
+ggsave("output/prueba_sf.png", g, width=10, height=8)
+
+# EJERCICIO 4:
+  # HACER MAPA COLOREANDO POR ALGUNA VARIABLE A NIVEL ESTADO
+  # HACER MAPA PARA UN SOLO ESTADO COLOREANDO POR ALGUNA VARIABLE A NIVEL municipio
+
+# library(tmap)
+# tm_shape(sf_mun) + tm_polygons(col="num_beneficiarios_dic2016_pc")
 
 
 # bonus track -------------------------------------------------------------
