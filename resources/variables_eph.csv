@@ -1,0 +1,26 @@
+"variable","descripcion","tipo"
+aglomerado,aglomerado,character
+ch03,relacion de parentesco,character
+ch04,sexo,character
+ch06,edad,numeric
+ch07,situacion conyugal,character
+ch08,tipo de cobertura medica,character
+ch09,lecto-escritura,character
+nivel_ed,nivel educativo,character
+ch15,lugar de nacimiento,character
+ch16,lugar de residencia,character
+pp03d,cantidad de ocupaciones,numeric
+pp3e_tot,horas trabajadas,numeric
+intensi,intensidad del trabajo,character
+pp03i,busqueda de mayor cantidad de horas,character
+cat_ocup,categoria ocupacional,character
+pp04a,carácter del establecimiento,character
+pp04d_cod,codigo de ocupacion,character
+pp04b_cod,rama de actividad,character
+pp04c99,tamaño del establecimiento,character
+pp07a,antigüedad en el trabajo,character
+v5_m,monto de ingreso por ayuda social,numeric
+t_vi,monto total de ingreso no laboral,numeric
+p21,ingreso ocupacion principal,numeric
+imputa,ingreso imputado (A CONFIRMAR),character
+ch16,lugar de residencia hace 5 años,character
