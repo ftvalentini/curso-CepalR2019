@@ -24,3 +24,4 @@ t_vi,monto total de ingreso no laboral,numeric
 p21,ingreso ocupacion principal,numeric
 imputa,ingreso imputado (A CONFIRMAR),character
 ch16,lugar de residencia hace 5 años,character
+estado,condicion de actividad,character
