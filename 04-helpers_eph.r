@@ -38,10 +38,16 @@ clean_eph = function(df_raw) {
     ) 
   # variables relevantes
   tab = tab %>% 
-    select(vars_keep$variable, codusu, nro_hogar, componente, ano4, trimestre)
+    select(vars_keep$variable
+           ,codusu, nro_hogar, componente
+           , ano4, trimestre
+           ,pondera)
   # define NAs as such en numericas
   tab = tab %>% 
-    mutate_if(is.numeric, function(x) ifelse(x==-9,NA,x))
+    mutate_if(is.numeric, function(x) ifelse(x=="" | x==" ", NA, x))
+  # define NAs as such en categoricas
+  tab = tab %>% 
+    mutate_if(function(x) !is.numeric(x), function(x) ifelse(x=="",NA,x))
   # faltante en t_vi es 0
   tab = tab %>%  
     mutate(t_vi = ifelse(is.na(t_vi), 0, t_vi))
@@ -75,7 +81,7 @@ clean_eph = function(df_raw) {
   tab = tab %>% mutate_at(vars(id_indiv, periodo), as.character)
   # drop variables no usadas
   tab = tab %>% 
-    select(-c(pp04d_cod, pp04b_cod, v5_m, pp04b_cod, digito
+    select(-c(pp04d_cod, pp04b_cod, v5_m, pp04b_cod, digito, letra
               ,codusu, nro_hogar, componente, imputa))
   
   return(tab)
