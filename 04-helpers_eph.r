@@ -44,10 +44,10 @@ clean_eph = function(df_raw) {
            ,pondera)
   # define NAs as such en numericas
   tab = tab %>% 
-    mutate_if(is.numeric, function(x) ifelse(x=="" | x==" ", NA, x))
+    mutate_if(is.numeric, function(x) ifelse(x==-9, NA, x))
   # define NAs as such en categoricas
   tab = tab %>% 
-    mutate_if(function(x) !is.numeric(x), function(x) ifelse(x=="",NA,x))
+    mutate_if(function(x) !is.numeric(x), function(x) ifelse(x=="" | x==" ",NA,x))
   # faltante en t_vi es 0
   tab = tab %>%  
     mutate(t_vi = ifelse(is.na(t_vi), 0, t_vi))
