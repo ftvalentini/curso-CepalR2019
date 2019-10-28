@@ -128,14 +128,19 @@ receta_trained = receta_simple(dat_train) %>% prep(retain=T)
 
 dat_train_prep = receta_trained %>% juice()
 
-
 # fit ---------------------------------------------------------------------
 
-fit_logistic = function(data, weighted=F) {
+fit_logistic = function(data) {
   glm(target ~ . - pondera, data=data, family="binomial")  
 }
 
 mod_l = fit_logistic(dat_train_prep)
+
+# library(margins)
+# margins(mod_l)
+
+summary(mod_l)
+broom::tidy(mod_l) %>% arrange(p.value)
 
 # predict -----------------------------------------------------------------
 
@@ -175,7 +180,6 @@ tabla_hl = function(target, prob) {
   return(tab)
 } 
 tabla_hl(dat_test$target, pred)
-
 
 # overall performance plots -------------------------------------------------
 
