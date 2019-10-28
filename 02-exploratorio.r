@@ -1,12 +1,14 @@
 library(magrittr)
+library(purrr)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(purrr)
+
 
 # working directory -------------------------------------------------------
 
 getwd()
+
 # opcion a
 path = "C:/Users/Fran/Documents/R_scripts_FV/curso-CepalR2019"  
 # opcion b: usar proyectos!
@@ -35,7 +37,6 @@ varios = read.delim(p_varios, header=T, sep=",", dec=".", stringsAsFactors=F
 dim(bolsa)
 names(pib)
 str(varios)
-glimpse(pib)
 head(bolsa)
 View(bolsa)
 
@@ -43,7 +44,7 @@ View(bolsa)
 bolsa %>% 
   dplyr::filter(uf == "RJ" & num_beneficiarios_dic2016 > 50000)
 bolsa %>% 
-  arrange(-num_beneficiarios_dic2016,municipio) %>% 
+  arrange(desc(uf), -num_beneficiarios_dic2016) %>% 
   head()
 bolsa %>% 
   slice(20:30)
@@ -51,6 +52,7 @@ bolsa %>%
 # columnas
 pib %>% select(municipio,vab_agro) %>% head()
 pib %>% select(-c(nome_da_grande_regiao,nome_da_unidade_da_federacao)) %>% head()
+pib %>% select(municipio)
 pib %>% pull(municipio)
 pib$municipio
 
@@ -69,6 +71,7 @@ pib = pib %>%
 dat = bolsa %>%
   inner_join(pib, by="municipio") %>% 
   left_join(varios, by="municipio")
+
 # setdiff(pib$municipio, bolsa$municipio)
 # setdiff(bolsa$municipio, pib$municipio)
 # setdiff(varios$municipio, bolsa$municipio)
@@ -150,6 +153,7 @@ tab = dat %>%
 # EJERCICIO 3:
   # obtener cantidad de metropolis (a) por estado y (b) por region
   # obtener densidad poblacional (a) por estado y (b) por region
+  # obtener la proporcion de la poblacion del estado que representa cada municipio
 
 # reshape (tidyr) ---------------------------------------------------------
 
