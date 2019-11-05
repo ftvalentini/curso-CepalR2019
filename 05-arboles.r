@@ -8,23 +8,14 @@ semilla = 800
 # base descargada de
 # https://www.kaggle.com/aljarah/xAPI-Edu-Data
 
-
-# notas para la clase -----------------------------------------------------
-
-# leer documentacion de como parte arbol y RF las numericas y las categoricas
-# leer ISLR de como parte arbol y RF las variables
-# leer sobre variable importance
-# ver que es OOB prediction error en ranger
-# armar ejemplo de como funciona map_* y map2
-# armar ejemplo de como funcionan tibbles con listas
-# ver como obtener facilmente signo de la importancia de feature RF cra la clase
-
 # read --------------------------------------------------------------------
 
 f = "data/raw/lms/xAPI-Edu-Data.csv"
 base = read.csv(f, stringsAsFactors=F) %>% janitor::clean_names()
 
+
 dict = read.delim("resources/variables_lms.txt", sep="|", stringsAsFactors=F)
+
 
 # clean -------------------------------------------------------------------
 
@@ -41,15 +32,11 @@ dat = base %>%
 skimr::skim(dat)
 
 num_vars = dat %>% select_if(is.numeric) %>% names()
-cat_vars = dat %>% select_if(function(x) !is.numeric(x)) %>% names()
-
 dat_num = dat %>% select(num_vars, target)
-dat_cat = dat %>% select(cat_vars)
 
 GGally::ggpairs(dat_num, aes(color=target))
 
 # ejercicio: hallar cuantos niveles tiene cada variable categorica
-# cat_levels = dat_cat %>% map_dbl(function(x) length(unique(x)))
 
 plot_bar = function(var) {
   ggplot(dat_cat) + 
@@ -75,14 +62,14 @@ fit_tree = function(data, cp=0.01, maxdepth=30, minsplit=20) {
 }
 
 mod = fit_tree(dat)
-mod2 = fit_tree(dat, cp=0, minsplit=1)
 
-# plot
-rpart.plot(mod, cex=0.5)
+rpart.plot(mod)
 rpart.plot(mod, extra=104)
 rpart.plot(mod, extra=2)
+
+mod2 = fit_tree(dat, cp=0, minsplit=1)
 rpart.plot(mod2)
-# reglas
+
 rpart.rules(mod, cover=T) %>% View()
 
 # predict
@@ -90,8 +77,8 @@ predict_tree = function(model, newdata) {
   predict(model, newdata=newdata, type="prob")[,1]
 } 
 
-pred_3 = predict_tree(mod3, newdata=dat)
-table(pred_3, dat$target)
+pred_2 = predict_tree(mod2, newdata=dat)
+table(pred_2, dat$target)
 
 
 # performance -------------------------------------------------------------
@@ -102,25 +89,20 @@ metrica_auc = function(target, prob_pred) {
   tab = data.frame(y=factor(target), prob=prob_pred)
   roc_auc(tab, truth=y, prob)$.estimate
 } 
-metrica_auc(dat$target, pred_3)
-
+metrica_auc(dat$target, pred_2)
 
 # data split --------------------------------------------------------------
 
-# idealmente: train - test y CV dentro de train
-# hacemos solo CV por pocos datos
-
-# library(rsample)
-# set.seed(semilla)
-# tt_split = dat %>% initial_split(prop=0.8)
-# dat_train = tt_split %>% training()
-# dat_test = tt_split %>% testing()
-
 library(rsample)
-set.seed(semilla)
-cv_split = vfold_cv(dat, v=5)
-# (analisis y assessment sets)
 
+set.seed(semilla)
+tt_split = dat %>% initial_split(prop=0.9)
+dat_train = tt_split %>% training()
+dat_test = tt_split %>% testing()
+
+set.seed(semilla)
+cv_split = vfold_cv(dat_train, v=5)
+# (analisis y assessment sets)
 
 # random forest -----------------------------------------------------------
 
@@ -130,11 +112,11 @@ receta_rf = function(dataset) {
     step_other(all_nominal(), -all_outcomes(), threshold=0.05)
 }
 
-library(ranger)
 # fit
+library(ranger)
 fit_rf = function(data, mtry=4, minsize=1, trees=500) {
   ranger(target ~ ., data=data, mtry=mtry, min.node.size=minsize, num.trees=trees
-         , probability=T, importance="permutation")
+         , probability=T, importance="impurity")
 }
 set.seed(semilla)
 mod_rf = fit_rf(data=dat, mtry=4, minsize=50)
@@ -145,7 +127,8 @@ predict_rf = function(model, newdata) {
 }
 pred_rf = predict_rf(mod_rf, dat)
 
-# train y predict para un corte de CV
+# train y predict para un split de CV y parametros dados
+
 train_apply_rf = function(fold_split, receta, mtry=4, minsize=1, trees=500) {
   
   # get analysis data
@@ -154,12 +137,15 @@ train_apply_rf = function(fold_split, receta, mtry=4, minsize=1, trees=500) {
   receta_trained = dat_an %>% receta %>% prep(retain=T)
   # get analysis preprocesado
   dat_an_prep = juice(receta_trained)
+  
   # get assessment data
   dat_as = fold_split %>% assessment()
   # dat_as_baked = dat_as %>% receta() %>% prep() %>% bake(newdata=dat_as)
   dat_as_baked = receta_trained %>% bake(new_data=dat_as)
+  
   # entrena modelo 
   mod = fit_rf(dat_an_prep, mtry, minsize, trees)
+  
   # predict  
   out = tibble(
     "id" = fold_split$id$id
@@ -170,15 +156,17 @@ train_apply_rf = function(fold_split, receta, mtry=4, minsize=1, trees=500) {
 }
 train_apply_rf(cv_split$splits$`1`, receta=receta_rf)
 
-kcv_rf = function(cv_splits, receta, mtry=4, minsize=1, trees=500) {
+
+# RF con kfold-CV
+kcv_rf = function(cvs, receta, mtry=4, minsize=1, trees=500) {
   map_df(
-    cv_split$splits,
+    cvs,
     function(s)
       train_apply_rf(fold_split=s, receta, mtry=mtry, minsize=minsize, trees=trees)
   )
 }
 
-library(yardstick)
+# AUC de output de kcv_rf
 kcv_auc_rf = function(tab_cv_pred) {
   tab_cv_pred %>%
     group_by(id) %>%
@@ -187,10 +175,10 @@ kcv_auc_rf = function(tab_cv_pred) {
     rename(auc = .estimate)
 }
 
-tab_cv_rf = kcv_rf(cv_splits, receta_rf)
+tab_cv_rf = kcv_rf(cv_split$splits, receta_rf)
 kcv_auc_rf(tab_cv_rf)
 
-# hiperparametrizacion
+# hiperparametrizacion (random grid search)
 set.seed(semilla)
 grilla = expand.grid(
   mtry = 2:(ncol(dat)-1)
@@ -199,11 +187,23 @@ grilla = expand.grid(
   slice(sample(nrow(.),50)) %>% 
   as_tibble()
 
+
+# matrices = list()
+# for (i in 1:20) matrices[[i]] = matrix(sample(100, 25), nrow=5)
+# nums = sample(100, 20)
+# tab = tibble(matrices=matrices, nums=nums)
+# tab %>% 
+#   mutate(
+#     rdo = map2(.x=matrices, .y=nums, function(x,y) x*y)
+#   )
+
+
+# kfold-cv para cada set de param 
 kcv = grilla %>% 
   mutate(
     pred_cv = map2(
       .x=mtry, .y=minsize
-      ,function(x,y) kcv_rf(cv_splits=cv_split, receta=receta_rf
+      ,function(x,y) kcv_rf(cvs=cv_split$splits, receta=receta_rf
                             ,mtry=x, minsize=y, trees=100)
     )
     ,auc_cv = map(pred_cv, kcv_auc_rf)
@@ -224,7 +224,7 @@ resultados_sum = resultados %>%
     m_auc = mean(auc)
     ,se = sd(auc)
     ,se1 = m_auc-se
-    ) %>% 
+  ) %>% 
   ungroup() %>% 
   arrange(-m_auc)
 
@@ -235,14 +235,20 @@ resultados_sum %>%
   filter(m_auc >= auc_min_se1) %>% 
   filter(minsize == max(minsize))
 
+# evaluacion en test
 mtry_opt = 2
 minsize_opt = 100
+receta_trained = dat_train %>% receta_rf() %>% prep(retain=T)
+dat_train_prep = receta_trained %>% juice()
+set.seed(semilla)
+mod_rf = fit_rf(dat_train_prep, mtry=2, minsize=100, trees=100)
+dat_test_prep = receta_trained %>% bake(new_data=dat_test)
+pred_rf = predict_rf(mod_rf, dat_test_prep)
+metrica_auc(dat_test_prep$target, pred_rf)
 
 # modelo final
-# se ajusta modelo con toda la data y parametros optimos
 dat_prep = dat %>% receta_rf() %>% prep(retain=T) %>% juice()
-set.seed(semilla)
-mod_rf = fit_rf(dat_prep, mtry=2, minsize=100, trees=100)
+mod_rf_final = fit_rf(dat_prep, mtry=2, minsize=100, trees=100)
 
 treeInfo(mod_rf, tree = 1)
 
@@ -253,11 +259,10 @@ varimp = tibble(
 ) %>% arrange(-importance)
 
 # feature importance plot
-# ggplot(varimp, aes(x=reorder(variable,importance), y=importance, fill=importance))+
-#   geom_bar(stat="identity", position="dodge") +
-#   coord_flip() +
-#   guides(fill=F)
-
+ggplot(varimp, aes(x=reorder(variable,importance), y=importance))+
+  geom_bar(stat="identity", position="dodge") +
+  coord_flip() +
+  guides(fill=F)
 
 
 # ejercicio:
@@ -267,35 +272,5 @@ varimp = tibble(
   # incluir el "step_other" en la hiperparametrizacion
 
 # ejercicio:
-  # obtener hiperparametros que optimizacion una funcion de ganancia ficticia
+  # obtener hiperparametros que optimicen una funcion de ganancia ficticia
   # (incluyendo el punto de corte de la prob predicha como hiperparametro!)
-
-
-# PARA TENER EN CUENTA:
-# la clasificacion es la misma si la hace directo ranger
-  # que si sacamos las clasficaciones de todos los arboles y clasificamos
-    # segun la clase mayoritaria predicha para cada obs
-# la probabilidad devuleta por ranger no es la misma que la proporcion de la clase
-  # mayoritaria devuelta por ranger (pero es cercana)
-
-# library(ranger)
-# fit_rf = function(data, mtry=4, minsize=1, trees=500) {
-#   ranger(target ~ ., data=data, mtry=mtry, min.node.size=minsize, num.trees=trees
-#          , probability=T)
-# }
-# fit_rf2 = function(data, mtry=4, minsize=1, trees=500) {
-#   ranger(target ~ ., data=data, mtry=mtry, min.node.size=minsize, num.trees=trees
-#          , probability=F)
-# }
-# set.seed(semilla)
-# gg = fit_rf(data=dat, mtry=4, minsize=50)
-# set.seed(semilla)
-# hh = fit_rf2(data=dat, mtry=4, minsize=50)
-# aa = predict(gg, data=dat)
-# bb = predict(hh, data=dat, predict.all=F)
-# cc = predict(hh, data=dat, predict.all=T)
-# aaa = aa$predictions[,1]
-# bbb = bb$predictions
-# rr = ifelse(cc$predictions == 2, 0, 1)
-# ccc = apply(rr, 1, mean) %>% {ifelse(.>0.5, 1, 0)}
-# table(bbb, ccc)
